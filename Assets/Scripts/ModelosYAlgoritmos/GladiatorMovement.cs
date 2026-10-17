@@ -47,6 +47,18 @@ namespace GladiusAI
             rb.linearVelocity = new Vector3(0f, vel.y, 0f);
         }
 
+        // Ningun camino (empujon, embestida, lo que sea) puede sacar al gladiador del escenario.
+        // Si la escena no tiene ArenaBounds no hace nada.
+        public void KeepInsideArena()
+        {
+            ArenaBounds arena = ArenaBounds.Instance;
+            if (arena == null) return;
+
+            Vector3 clamped = arena.ClampPosition(rb.position, avoidRadius);
+            if (clamped != rb.position)
+                rb.position = clamped;
+        }
+
         public void ApplyKnockback(Vector3 attackerPos)
         {
             Vector3 knockDir = (self.position - attackerPos).normalized;

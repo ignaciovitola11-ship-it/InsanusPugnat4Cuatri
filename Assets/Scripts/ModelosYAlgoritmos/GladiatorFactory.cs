@@ -1,28 +1,37 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace GladiusAI
 {
     public class GladiatorFactory : MonoBehaviour, IGladiatorFactory
     {
-        [Header("Prefabs")]
-        [SerializeField] private GladiatorNPC playerPrefab;
-        [SerializeField] private GladiatorNPC enemyPrefab;
-
-        private GladiatorNPC Create(GladiatorNPC prefab, Vector3 position, Quaternion rotation)
+        [System.Serializable]
+        public struct KindPrefab
         {
-            if (prefab == null)
+            public GladiatorKind kind;
+            public GladiatorNPC prefab;
+        }
+
+        [Header("Prefab de cada tipo de gladiador")]
+        [SerializeField] private KindPrefab[] prefabs = new KindPrefab[0];
+
+        private readonly Dictionary<GladiatorKind, GladiatorNPC> prefabByKind = new Dictionary<GladiatorKind, GladiatorNPC>();
+
+        private void Awake()
+        {
+            foreach (var entry in prefabs)
+                prefabByKind[entry.kind] = entry.prefab;
+        }
+
+        public GladiatorNPC Create(GladiatorKind kind, Vector3 position, Quaternion rotation)
+        {
+            if (!prefabByKind.TryGetValue(kind, out var prefab) || prefab == null)
             {
-                Debug.LogError("[GladiatorFactory] Falta asignar un prefab en el Inspector.");
+                Debug.LogError($"[GladiatorFactory] Falta asignar un prefab para {kind} en la tabla del Inspector.");
                 return null;
             }
 
             return Instantiate(prefab, position, rotation);
         }
-
-        public GladiatorNPC CreatePlayer(Vector3 position, Quaternion rotation)
-            => Create(playerPrefab, position, rotation);
-
-        public GladiatorNPC CreateEnemy(Vector3 position, Quaternion rotation)
-            => Create(enemyPrefab, position, rotation);
     }
 }

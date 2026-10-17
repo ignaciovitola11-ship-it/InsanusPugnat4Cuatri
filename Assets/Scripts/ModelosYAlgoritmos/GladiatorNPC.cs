@@ -61,6 +61,7 @@ namespace GladiusAI
         public bool IsDead => CurrentHP <= 0f;
         public bool HasSurrendered { get; private set; }
         public float OrderCooldownRatio => combat != null ? combat.OrderCooldownRatio : 0f;
+        public float CorpseLifetime => corpseLifetime;
 
         /// Sprite animado del personaje (no incluye la sombra de los pies).
         public SpriteRenderer CharacterSprite { get; private set; }
@@ -76,7 +77,6 @@ namespace GladiusAI
 
         private bool combatEnabled = true;
         private string lastAction;
-        private bool destroyOnDeath = true;
         private bool invulnerable;
         private bool corpseCleanupDone;
         private Color currentColor;
@@ -151,8 +151,6 @@ namespace GladiusAI
             rb.angularVelocity = Vector3.zero;
         }
 
-        public void SetDestroyOnDeath(bool value) => destroyOnDeath = value;
-
         /// Usado por CombatStarter en la ola-tutorial invulnerable: TakeDamage no le hace nada mientras esto sea true.
         public void SetInvulnerable(bool value) => invulnerable = value;
 
@@ -163,7 +161,9 @@ namespace GladiusAI
         {
             corpseCleanupDone = false;
             HasSurrendered = false;
+            invulnerable = false;
             lastAction = null;
+            FullyHeal();
             SetColor(Color.white);
             SetPhysicalBodyEnabled(true);
             animator.ResetToIdle();
@@ -202,6 +202,8 @@ namespace GladiusAI
             TickBehaviour();
             UpdateAnimation();
         }
+
+        private void FixedUpdate() => movement.KeepInsideArena();
 
         private void TickBehaviour()
         {
@@ -339,14 +341,12 @@ namespace GladiusAI
             if (!corpseCleanupDone)
             {
                 corpseCleanupDone = true;
-                EventManager.Raise(new GladiatorDiedEvent(gladiatorName));
                 animator.PlayDeath();
 
-                // El cuerpo deja de chocar al instante (no estorba al resto), pero se queda
-                // unos segundos para que se vea la animación Dead antes de sacarlo.
+                // El cuerpo deja de chocar al instante (no estorba al resto) y queda en la arena para
+                // que se vea la animación Dead, hasta que quien lo creó lo devuelve (CombatStarter -> pool).
                 SetPhysicalBodyEnabled(false);
-                if (destroyOnDeath)
-                    Destroy(gameObject, corpseLifetime);
+                EventManager.Raise(new GladiatorDiedEvent(this));
             }
 
             return NodeState.Success;
@@ -364,6 +364,7 @@ namespace GladiusAI
         {
             SetColor(Color.blue);
             movement.Stop();
+            bool firstTime = !HasSurrendered;
             HasSurrendered = true;
 
             if (IsNewAction("Surrender"))
@@ -372,6 +373,9 @@ namespace GladiusAI
 
             SetCombatEnabled(false);
             cachedTargetNPC?.SetCombatEnabled(false);
+
+            if (firstTime)
+                EventManager.Raise(new GladiatorSurrenderedEvent(this));
 
             return NodeState.Success;
         }

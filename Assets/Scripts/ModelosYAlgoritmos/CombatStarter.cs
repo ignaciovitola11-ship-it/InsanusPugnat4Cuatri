@@ -90,13 +90,29 @@ namespace GladiusAI
         private GladiatorNPC player;
         private GladiatorNPC enemy;
         private GladiatorNPC enemy2;
-        private bool retargetedToSecondEnemy;
         private bool singleEncounterEnded;
+        private bool fightResolved;
         private GladiatorPool enemyPool;
+
+        private bool IsWaveMode => waves != null && waves.Length > 0;
+
+        private void OnEnable()
+        {
+            EventManager.Subscribe<GladiatorDiedEvent>(OnGladiatorDied);
+            EventManager.Subscribe<GladiatorSurrenderedEvent>(OnGladiatorSurrendered);
+        }
+
+        private void OnDisable()
+        {
+            EventManager.Unsubscribe<GladiatorDiedEvent>(OnGladiatorDied);
+            EventManager.Unsubscribe<GladiatorSurrenderedEvent>(OnGladiatorSurrendered);
+        }
 
         private void Start()
         {
-            if (waves != null && waves.Length > 0)
+            enemyPool = new GladiatorPool(Factory, GladiatorKind.Enemy);
+
+            if (IsWaveMode)
                 StartCoroutine(RunWaveSequence());
             else
                 StartSingleEncounter();
@@ -104,14 +120,14 @@ namespace GladiusAI
 
         private void StartSingleEncounter()
         {
-            player = Factory.CreatePlayer(playerSpawnPoint.position, Quaternion.identity);
+            player = Factory.Create(GladiatorKind.Player, playerSpawnPoint.position, Quaternion.identity);
             if (player != null)
             {
                 var selected = GladiatorRoster.GetSelected();
                 player.ConfigureStats(selected.maxHP, selected.minDamage, selected.maxDamage, selected.attackCooldown);
             }
 
-            enemy = Factory.CreateEnemy(enemySpawnPoint.position, Quaternion.identity);
+            enemy = enemyPool.Get(enemySpawnPoint.position, Quaternion.identity);
 
             if (player != null && enemy != null)
             {
@@ -121,7 +137,7 @@ namespace GladiusAI
 
             if (enemySpawnPoint2 != null)
             {
-                enemy2 = Factory.CreateEnemy(enemySpawnPoint2.position, Quaternion.identity);
+                enemy2 = enemyPool.Get(enemySpawnPoint2.position, Quaternion.identity);
                 if (player != null && enemy2 != null)
                     enemy2.SetTarget(player.transform);
                 enemy2?.SetCombatEnabled(false);
@@ -135,25 +151,41 @@ namespace GladiusAI
             StartCoroutine(RunCountdown(activateCombatAfter: true));
         }
 
-        private void Update()
+        private void OnGladiatorDied(GladiatorDiedEvent e)
         {
-            // Nivel 2: cuando el primer enemigo cae, el jugador pasa a enfrentar al segundo.
-            // enemy puede ya ser null: al morir se hace Destroy, y segun el orden de Update
-            // este chequeo puede correr recien el frame siguiente.
-            if (!retargetedToSecondEnemy && enemy2 != null && player != null &&
-                (enemy == null || enemy.IsDead) && !enemy2.IsDead)
+            GladiatorNPC fallen = e.gladiator;
+
+            if (IsWaveMode)
             {
-                player.SetTarget(enemy2.transform);
-                retargetedToSecondEnemy = true;
+                if (fallen == player || fallen == enemy)
+                    fightResolved = true;
+                return;
             }
 
-            CheckSingleEncounterOutcome();
+            // Nivel 2: cuando el primer enemigo cae, el jugador pasa a enfrentar al segundo.
+            if (fallen == enemy && enemy2 != null && !enemy2.IsDead && player != null)
+                player.SetTarget(enemy2.transform);
+
+            if (fallen == enemy || fallen == enemy2)
+                StartCoroutine(RetireEnemy(fallen, fallen.CorpseLifetime));
+
+            EvaluateSingleEncounter();
         }
 
-        private void CheckSingleEncounterOutcome()
+        private void OnGladiatorSurrendered(GladiatorSurrenderedEvent e)
+        {
+            if (e.gladiator != player) return;
+
+            if (IsWaveMode)
+                fightResolved = true;
+            else
+                EvaluateSingleEncounter();
+        }
+
+        // Encuentro unico: se evalua cuando llega un evento de muerte o de rendicion, no cada frame.
+        private void EvaluateSingleEncounter()
         {
             if (singleEncounterEnded || player == null) return;
-            if (waves != null && waves.Length > 0) return; // ese camino lo maneja RunWaveSequence
 
             if (player.IsDead)
             {
@@ -238,9 +270,7 @@ namespace GladiusAI
 
         private IEnumerator RunWaveSequence()
         {
-            enemyPool = new GladiatorPool(Factory);
-
-            player = Factory.CreatePlayer(playerSpawnPoint.position, Quaternion.identity);
+            player = Factory.Create(GladiatorKind.Player, playerSpawnPoint.position, Quaternion.identity);
             player?.SetIntentController(intentController);
             player?.SetCombatEnabled(false);
 
@@ -278,6 +308,7 @@ namespace GladiusAI
                 if (wave.requiredIntentToStart != PlayerIntent.None)
                     yield return StartCoroutine(WaitForRequiredIntent(wave));
 
+                fightResolved = false;
                 SetGladiatorsFighting(true);
                 SetPromptHighlight(wave.highlightDuringFight);
                 yield return RunFight(wave);
@@ -304,8 +335,7 @@ namespace GladiusAI
                 if (i < waves.Length - 1)
                 {
                     SoundManager.Play(SoundId.CrowdCheer);
-                    yield return new WaitForSeconds(delayBetweenWaves);
-                    enemyPool.Release(enemy);
+                    yield return RetireEnemy(enemy, delayBetweenWaves);
                 }
             }
 
@@ -321,7 +351,7 @@ namespace GladiusAI
             bool hasMidFightDialogue = wave.midFightDialogue != null && wave.midFightDialogue.Length > 0;
             float fightTime = 0f;
 
-            while (IsFightOngoing())
+            while (!fightResolved && enemy != null && player != null)
             {
                 if (hasMidFightDialogue && fightTime >= wave.midFightDelaySeconds)
                 {
@@ -337,8 +367,12 @@ namespace GladiusAI
             }
         }
 
-        private bool IsFightOngoing()
-            => enemy != null && !enemy.IsDead && player != null && !player.IsDead && !player.HasSurrendered;
+        // Deja el cuerpo un rato en la arena (se ve la animación Dead) y despues lo devuelve al pool.
+        private IEnumerator RetireEnemy(GladiatorNPC fallen, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            enemyPool.Release(fallen);
+        }
 
         private void SetGladiatorsFighting(bool fighting)
         {

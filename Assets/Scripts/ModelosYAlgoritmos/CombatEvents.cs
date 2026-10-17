@@ -4,11 +4,21 @@ namespace GladiusAI
 
     public readonly struct GladiatorDiedEvent
     {
-        public readonly string gladiatorName;
+        public readonly GladiatorNPC gladiator;
 
-        public GladiatorDiedEvent(string gladiatorName)
+        public GladiatorDiedEvent(GladiatorNPC gladiator)
         {
-            this.gladiatorName = gladiatorName;
+            this.gladiator = gladiator;
+        }
+    }
+
+    public readonly struct GladiatorSurrenderedEvent
+    {
+        public readonly GladiatorNPC gladiator;
+
+        public GladiatorSurrenderedEvent(GladiatorNPC gladiator)
+        {
+            this.gladiator = gladiator;
         }
     }
 
