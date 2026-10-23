@@ -581,9 +581,14 @@ MonoBehaviour:
   countdownLabel: {fileID: 470833053}
   tutorialHintLabel: {fileID: 0}
   intentController: {fileID: 1957611419}
+  dialogue: {fileID: 0}
+  orderButtons: []
+  levelIntroDialogue: []
+  levelOutroDialogue: []
   nextSceneAfterCombat: Menu
   delayBeforeNextScene: 2.5
   delayBetweenWaves: 2
+  waveTitleSeconds: 3
   grantsGladiatorUnlock: 0
 --- !u!4 &230448788
 Transform:
@@ -1927,8 +1932,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 747b883fbea34d34b98e0c9231fd6548, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  playerPrefab: {fileID: 9179437216136576759, guid: b608947e7c164764bb94fac4e5f2a6b5, type: 3}
-  enemyPrefab: {fileID: 8271802930137433464, guid: ed5b7c315d2b2fc41a0419f5d5f810bc, type: 3}
+  prefabs:
+  - kind: 0
+    prefab: {fileID: 9179437216136576759, guid: b608947e7c164764bb94fac4e5f2a6b5, type: 3}
+  - kind: 1
+    prefab: {fileID: 8271802930137433464, guid: ed5b7c315d2b2fc41a0419f5d5f810bc, type: 3}
 --- !u!4 &933611375
 Transform:
   m_ObjectHideFlags: 0

@@ -12,9 +12,14 @@ namespace GladiusAI
         [SerializeField] private Vector3 size = new Vector3(30f, 0f, 30f);
         [SerializeField] private float margin = 3f;
 
+        [Tooltip("Si esta activo el limite es una elipse inscripta en el rectangulo (arena ovalada).")]
+        [SerializeField] private bool elliptical;
+
         private void Awake() => Instance = this;
 
         public Vector3 Center => transform.position;
+        public Vector3 Size => size;
+        public bool Elliptical => elliptical;
 
         public Vector3 RandomPointInside()
         {
@@ -43,6 +48,22 @@ namespace GladiusAI
             Vector3 local = position - Center;
             float halfX = size.x / 2f - bodyRadius;
             float halfZ = size.z / 2f - bodyRadius;
+
+            if (elliptical)
+            {
+                // Se lleva el punto al circulo unitario: si cae afuera, se lo devuelve al borde de la elipse.
+                float nx = local.x / halfX;
+                float nz = local.z / halfZ;
+                float sqr = nx * nx + nz * nz;
+                if (sqr > 1f)
+                {
+                    float inv = 1f / Mathf.Sqrt(sqr);
+                    local.x = nx * inv * halfX;
+                    local.z = nz * inv * halfZ;
+                }
+                return Center + local;
+            }
+
             local.x = Mathf.Clamp(local.x, -halfX, halfX);
             local.z = Mathf.Clamp(local.z, -halfZ, halfZ);
             return Center + local;
@@ -51,7 +72,20 @@ namespace GladiusAI
         private void OnDrawGizmos()
         {
             Gizmos.color = Color.cyan;
-            Gizmos.DrawWireCube(transform.position, new Vector3(size.x, 0.1f, size.z));
+            if (!elliptical)
+            {
+                Gizmos.DrawWireCube(transform.position, new Vector3(size.x, 0.1f, size.z));
+                return;
+            }
+
+            Vector3 prev = transform.position + new Vector3(size.x / 2f, 0f, 0f);
+            for (int i = 1; i <= 48; i++)
+            {
+                float a = i * Mathf.PI * 2f / 48f;
+                Vector3 next = transform.position + new Vector3(Mathf.Cos(a) * size.x / 2f, 0f, Mathf.Sin(a) * size.z / 2f);
+                Gizmos.DrawLine(prev, next);
+                prev = next;
+            }
         }
     }
 }

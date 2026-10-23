@@ -1,6 +1,5 @@
 {
   "dependencies": {
-[IO.File]::WriteAllText('D:\GladiusAI\InsanusPugnat4Cuatri\Packages\manifest.json', [regex]::Replace([IO.File]::ReadAllText('D:\GladiusAI\InsanusPugnat4Cuatri\Packages\manifest.json'), '(?m)^[ \t]*"com\.coplaydev\.unity-mcp":[^\r\n]*\r?\n', ''), (New-Object System.Text.UTF8Encoding($false)))
     "com.unity.2d.sprite": "1.0.0",
     "com.unity.ai.navigation": "2.0.9",
     "com.unity.collab-proxy": "2.10.0",

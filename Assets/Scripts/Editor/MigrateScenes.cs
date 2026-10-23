@@ -38,9 +38,7 @@ namespace GladiusAI.EditorTools
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
                 return;
 
-            var playerPrefab = LoadPrefab(PlayerPrefabPath);
-            var enemyPrefab = LoadPrefab(EnemyPrefabPath);
-            if (playerPrefab == null || enemyPrefab == null)
+            if (LoadPrefab(PlayerPrefabPath) == null || LoadPrefab(EnemyPrefabPath) == null)
             {
                 Debug.LogError($"No pude cargar los prefabs ({PlayerPrefabPath} / {EnemyPrefabPath}). No se cambio nada.");
                 return;
@@ -51,7 +49,7 @@ namespace GladiusAI.EditorTools
             try
             {
                 foreach (string path in FactoryScenes)
-                    MigrateScene(path, playerPrefab, enemyPrefab);
+                    MigrateScene(path);
             }
             finally
             {
@@ -68,7 +66,7 @@ namespace GladiusAI.EditorTools
             return asset != null ? asset.GetComponent<GladiatorNPC>() : null;
         }
 
-        private static void MigrateScene(string path, GladiatorNPC playerPrefab, GladiatorNPC enemyPrefab)
+        private static void MigrateScene(string path)
         {
             if (!System.IO.File.Exists(path))
             {
@@ -78,7 +76,7 @@ namespace GladiusAI.EditorTools
 
             var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
 
-            bool factoryChanged = MigrateFactory(scene.name, playerPrefab, enemyPrefab);
+            bool factoryChanged = MigrateFactory(scene.name);
             bool boundsAdded = System.Array.IndexOf(ArenaScenes, path) >= 0 && AddArenaBounds(scene.name);
 
             if (factoryChanged || boundsAdded)
@@ -88,12 +86,22 @@ namespace GladiusAI.EditorTools
             }
         }
 
-        private static bool MigrateFactory(string sceneName, GladiatorNPC playerPrefab, GladiatorNPC enemyPrefab)
+        private static bool MigrateFactory(string sceneName)
         {
             var factory = Object.FindFirstObjectByType<GladiatorFactory>(FindObjectsInactive.Include);
             if (factory == null)
             {
                 Debug.LogWarning($"[{sceneName}] no tiene GladiatorFactory.");
+                return false;
+            }
+
+            // Los prefabs se cargan DESPUES de abrir la escena: al abrir una escena en modo Single Unity
+            // descarta los assets que nadie referencia, y una referencia cargada antes quedaba en blanco.
+            var playerPrefab = LoadPrefab(PlayerPrefabPath);
+            var enemyPrefab = LoadPrefab(EnemyPrefabPath);
+            if (playerPrefab == null || enemyPrefab == null)
+            {
+                Debug.LogError($"[{sceneName}] no pude cargar los prefabs, no se toca el factory.");
                 return false;
             }
 
@@ -112,6 +120,16 @@ namespace GladiusAI.EditorTools
             SetRow(rows.GetArrayElementAtIndex(0), GladiatorKind.Player, playerPrefab);
             SetRow(rows.GetArrayElementAtIndex(1), GladiatorKind.Enemy, enemyPrefab);
             so.ApplyModifiedProperties();
+
+            var saved = new SerializedObject(factory).FindProperty("prefabs");
+            bool stuck = saved.arraySize == 2 &&
+                saved.GetArrayElementAtIndex(0).FindPropertyRelative("prefab").objectReferenceValue != null &&
+                saved.GetArrayElementAtIndex(1).FindPropertyRelative("prefab").objectReferenceValue != null;
+            if (!stuck)
+            {
+                Debug.LogError($"[{sceneName}] la tabla del factory NO quedo con los prefabs asignados.");
+                return false;
+            }
 
             Debug.Log($"[{sceneName}] tabla del factory cargada (Player y Enemy).");
             return true;
